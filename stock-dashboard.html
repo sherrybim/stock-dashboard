@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="股票追蹤">
+<title>股票儀表板</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: rgba(255,255,255,0.07);
+    --text: #f0f2ff;
+    --text2: #8b90a7;
+    --text3: #555a72;
+    --accent: #6c8fff;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --red: #f87171;
+    --green-bg: rgba(52,211,153,0.12);
+    --red-bg: rgba(248,113,113,0.12);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --font: 'SF Pro Display', -apple-system, 'PingFang TC', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(15,17,23,0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 3px; padding: 6px 4px; background: none; border: none;
+    color: var(--text3); cursor: pointer; font-size: 10px; font-family: var(--font);
+    transition: color 0.2s;
+  }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn svg { width: 22px; height: 22px; }
+
+  /* PAGES */
+  .page { display: none; padding: 0 0 1rem; }
+  .page.active { display: block; }
+
+  /* HEADER */
+  .page-header {
+    padding: 56px 16px 12px;
+    background: linear-gradient(180deg, var(--bg2) 0%, transparent 100%);
+  }
+  .page-header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-header p { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  /* SETUP BANNER */
+  #setup-banner {
+    margin: 0 16px 16px;
+    background: rgba(108,143,255,0.12);
+    border: 0.5px solid rgba(108,143,255,0.3);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  #setup-banner p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  #setup-banner strong { color: var(--accent); }
+  .setup-inputs { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .setup-inputs input {
+    width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
+    background: var(--bg3); border: 0.5px solid var(--border);
+    color: var(--text); font-size: 13px; font-family: var(--font);
+  }
+  .setup-inputs input::placeholder { color: var(--text3); }
+  .btn-save {
+    padding: 10px 20px; background: var(--accent); color: #fff;
+    border: none; border-radius: var(--radius-sm); font-size: 13px;
+    font-weight: 500; font-family: var(--font); cursor: pointer;
+    align-self: flex-start; margin-top: 4px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 0 16px 12px;
+  }
+  .card-title {
+    font-size: 12px; color: var(--text3); letter-spacing: 0.5px;
+    text-transform: uppercase; margin-bottom: 10px; font-weight: 500;
+  }
+
+  /* METRIC GRID */
+  .metric-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin: 0 16px 12px;
+  }
+  .metric-card {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+  }
+  .metric-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .metric-value { font-size: 19px; font-weight: 600; letter-spacing: -0.3px; }
+  .metric-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+  .neutral { color: var(--text); }
+
+  /* BIG METRIC */
+  .big-metric {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 20px 16px;
+    margin: 0 16px 12px;
+  }
+  .big-metric .label { font-size: 12px; color: var(--text3); margin-bottom: 6px; }
+  .big-metric .value { font-size: 36px; font-weight: 700; letter-spacing: -1px; }
+  .big-metric .sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+  /* STOCK TABLE */
+  .stock-list { margin: 0 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .stock-row {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .stock-code {
+    font-size: 16px; font-weight: 600; min-width: 48px;
+    color: var(--accent);
+  }
+  .stock-name { font-size: 12px; color: var(--text2); margin-top: 1px; }
+  .stock-right { margin-left: auto; text-align: right; }
+  .stock-price { font-size: 17px; font-weight: 600; }
+  .stock-pct {
+    font-size: 11px; padding: 2px 7px; border-radius: 20px;
+    display: inline-block; margin-top: 3px; font-weight: 500;
+  }
+  .pct-up { background: var(--green-bg); color: var(--green); }
+  .pct-down { background: var(--red-bg); color: var(--red); }
+
+  /* CHART AREA */
+  .chart-wrap { position: relative; height: 240px; margin: 8px 0 0; }
+  .toggle-row {
+    display: flex; gap: 8px; margin-bottom: 12px;
+  }
+  .toggle-btn {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px;
+    font-family: var(--font); cursor: pointer; border: 0.5px solid var(--border);
+    background: transparent; color: var(--text2); transition: all 0.2s;
+  }
+  .toggle-btn.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+
+  /* YEAR SELECT */
+  select {
+    padding: 6px 12px; border-radius: var(--radius-sm);
+    background: var(--bg3); border: 0.5px solid var(--border);
+    color: var(--text); font-size: 13px; font-family: var(--font);
+    -webkit-appearance: none; appearance: none;
+  }
+
+  /* TRANSACTION FORM */
+  .form-section { margin: 0 16px 12px; }
+  .form-label { font-size: 12px; color: var(--text3); margin-bottom: 5px; display: block; }
+  .form-input {
+    width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
+    background: var(--bg2); border: 0.5px solid var(--border);
+    color: var(--text); font-size: 15px; font-family: var(--font);
+    -webkit-appearance: none; appearance: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-group { margin-bottom: 12px; }
+  .type-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .type-pill {
+    padding: 8px 14px; border-radius: 20px; font-size: 13px;
+    font-family: var(--font); cursor: pointer; border: 0.5px solid var(--border);
+    background: var(--bg2); color: var(--text2); transition: all 0.2s;
+  }
+  .type-pill.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .computed-row {
+    background: var(--bg3); border-radius: var(--radius-sm);
+    padding: 12px 14px; margin-bottom: 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .computed-item {
+    display: flex; justify-content: space-between;
+    font-size: 13px; color: var(--text2);
+  }
+  .computed-item span:last-child { color: var(--text); font-weight: 500; }
+  .btn-submit {
+    width: 100%; padding: 16px; background: var(--accent); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 16px;
+    font-weight: 600; font-family: var(--font); cursor: pointer;
+    letter-spacing: -0.2px; transition: opacity 0.2s;
+  }
+  .btn-submit:active { opacity: 0.8; }
+  .btn-submit:disabled { opacity: 0.4; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-80px);
+    background: var(--bg3); border: 0.5px solid var(--border);
+    color: var(--text); padding: 12px 20px; border-radius: 30px;
+    font-size: 13px; z-index: 999; transition: transform 0.3s ease;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* HISTORY */
+  .tx-list { display: flex; flex-direction: column; gap: 8px; }
+  .tx-row {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 12px 16px;
+  }
+  .tx-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .tx-code { font-size: 14px; font-weight: 600; }
+  .tx-type {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: var(--bg3); color: var(--text2);
+  }
+  .tx-type.buy { background: rgba(108,143,255,0.15); color: var(--accent); }
+  .tx-type.sell { background: var(--red-bg); color: var(--red); }
+  .tx-type.div { background: rgba(167,139,250,0.15); color: var(--accent2); }
+  .tx-bottom { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
+
+  /* LOADING */
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px; color: var(--text3); font-size: 14px; gap: 10px;
+  }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section-title {
+    font-size: 18px; font-weight: 600; margin: 0 16px 12px;
+    letter-spacing: -0.3px;
+  }
+  .divider { height: 0.5px; background: var(--border); margin: 4px 16px 16px; }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- PAGE: 總覽 -->
+<div id="page-overview" class="page active">
+  <div class="page-header">
+    <h1>股票總覽</h1>
+    <p id="last-updated">點擊重新整理載入資料</p>
+  </div>
+  <div id="setup-banner">
+    <p>請先設定你的 Google Sheets 連結，才能載入資料。</p>
+    <div class="setup-inputs">
+      <input id="input-csv-url" type="url" placeholder="樞紐分析表4 CSV 網址（用於讀取持倉）">
+      <input id="input-overview-url" type="url" placeholder="台股總覽 CSV 網址（用於讀取總報酬）">
+      <input id="input-raw-url" type="url" placeholder="raw data CSV 網址（用於讀取交易記錄）">
+      <input id="input-gas-url" type="url" placeholder="Google Apps Script 部署網址（用於寫入新交易）">
+      <button class="btn-save" onclick="saveSettings()">儲存並載入</button>
+    </div>
+  </div>
+  <div id="overview-content" style="display:none">
+    <div class="big-metric">
+      <div class="label">持有現值</div>
+      <div class="value neutral" id="ov-value">—</div>
+      <div class="sub" id="ov-cost">投入成本 —</div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">已實現損益（含配息）</div>
+        <div class="metric-value" id="ov-pnl">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">報酬率（含配息）</div>
+        <div class="metric-value" id="ov-roi">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">年化報酬率</div>
+        <div class="metric-value" id="ov-annualized">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">配息合計</div>
+        <div class="metric-value" id="ov-dividend">—</div>
+      </div>
+    </div>
+    <div class="metric-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="metric-card">
+        <div class="metric-label">純買賣損益</div>
+        <div class="metric-value" id="ov-pnl-nodiv">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">無配息報酬率</div>
+        <div class="metric-value" id="ov-roi-nodiv">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">投資年數</div>
+        <div class="metric-value neutral" id="ov-years">—</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <p class="section-title">持倉明細</p>
+    <div id="stock-list" class="stock-list">
+      <div class="loading"><div class="spinner"></div>載入中…</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: 圖表 -->
+<div id="page-charts" class="page">
+  <div class="page-header">
+    <h1>圖表分析</h1>
+  </div>
+  <div class="card">
+    <div class="card-title">庫存股分配</div>
+    <div class="toggle-row">
+      <button class="toggle-btn active" onclick="switchPieMode('value', this)">持有現值</button>
+      <button class="toggle-btn" onclick="switchPieMode('shares', this)">股數</button>
+    </div>
+    <div class="chart-wrap"><canvas id="pie-holdings"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>配息分配</span>
+      <select id="div-year-select" onchange="renderDividendChart()">
+        <option value="all">全部年度</option>
+      </select>
+    </div>
+    <div class="chart-wrap"><canvas id="pie-dividends"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">各股損益比較</div>
+    <div class="chart-wrap" style="height:280px"><canvas id="bar-pnl"></canvas></div>
+  </div>
+</div>
+
+<!-- PAGE: 新增交易 -->
+<div id="page-add" class="page">
+  <div class="page-header">
+    <h1>新增交易</h1>
+  </div>
+  <div class="form-section">
+    <div class="form-group">
+      <label class="form-label">買賣別</label>
+      <div class="type-pills">
+        <button class="type-pill selected" onclick="selectType('現股買進', this)">現股買進</button>
+        <button class="type-pill" onclick="selectType('現股賣出', this)">現股賣出</button>
+        <button class="type-pill" onclick="selectType('股息', this)">股息</button>
+        <button class="type-pill" onclick="selectType('匯撥轉入', this)">匯撥轉入</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">成交日期</label>
+      <input class="form-input" type="date" id="f-date">
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">股票代碼</label>
+        <input class="form-input" type="text" id="f-code" placeholder="e.g. 2330" inputmode="numeric" oninput="lookupName()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">公司名稱</label>
+        <input class="form-input" type="text" id="f-name" placeholder="自動帶入">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">成交單價</label>
+        <input class="form-input" type="number" id="f-price" placeholder="0" inputmode="decimal" oninput="calcComputed()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">成交股數</label>
+        <input class="form-input" type="number" id="f-qty" placeholder="0" inputmode="numeric" oninput="calcComputed()">
+      </div>
+    </div>
+    <div class="computed-row" id="computed-area">
+      <div class="computed-item"><span>成交價金</span><span id="c-amount">—</span></div>
+      <div class="computed-item"><span>手續費（折扣後）</span><span id="c-fee">—</span></div>
+      <div class="computed-item"><span>交易稅</span><span id="c-tax">—</span></div>
+      <div class="computed-item" style="border-top:0.5px solid var(--border);padding-top:6px;margin-top:2px">
+        <span style="color:var(--text)">淨收付金額</span><span id="c-net" style="font-size:15px"></span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">備註（選填）</label>
+      <input class="form-input" type="text" id="f-note" placeholder="可不填">
+    </div>
+    <button class="btn-submit" id="btn-submit" onclick="submitTransaction()">新增交易</button>
+  </div>
+</div>
+
+<!-- PAGE: 交易記錄 -->
+<div id="page-history" class="page">
+  <div class="page-header">
+    <h1>交易記錄</h1>
+  </div>
+  <div style="padding: 0 16px 12px; display:flex; gap:8px;">
+    <select id="filter-code" onchange="renderHistory()" style="flex:1">
+      <option value="">全部股票</option>
+    </select>
+    <select id="filter-type" onchange="renderHistory()" style="flex:1">
+      <option value="">全部類型</option>
+      <option value="現股買進">現股買進</option>
+      <option value="現股賣出">現股賣出</option>
+      <option value="股息">股息</option>
+      <option value="匯撥轉入">匯撥轉入</option>
+    </select>
+  </div>
+  <div class="card">
+    <div id="history-list" class="tx-list">
+      <div class="loading"><div class="spinner"></div>載入中…</div>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <button class="nav-btn active" onclick="showPage('overview', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+    </svg>
+    總覽
+  </button>
+  <button class="nav-btn" onclick="showPage('charts', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <circle cx="12" cy="12" r="9"/><path d="M12 12L12 3"/><path d="M12 12L19.5 16.5"/>
+    </svg>
+    圖表
+  </button>
+  <button class="nav-btn" onclick="showPage('add', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>
+    </svg>
+    新增
+  </button>
+  <button class="nav-btn" onclick="showPage('history', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+      <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
+    </svg>
+    記錄
+  </button>
+</nav>
+
+<script>
+// ===== STATE =====
+let CFG = {};
+let pivotData = [];
+let rawData = [];
+let overviewData = {};
+let holdingsPieChart = null;
+let divPieChart = null;
+let barChart = null;
+let pieMode = 'value';
+let selectedType = '現股買進';
+
+// ===== INIT =====
+window.addEventListener('load', () => {
+  CFG = loadSettings();
+  setTodayDate();
+  if (CFG.csvUrl) {
+    document.getElementById('setup-banner').style.display = 'none';
+    document.getElementById('overview-content').style.display = 'block';
+    loadAll();
+  }
+  restoreInputs();
+});
+
+function setTodayDate() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f-date').value = today;
+}
+
+// ===== SETTINGS =====
+function loadSettings() {
+  try {
+    return JSON.parse(localStorage.getItem('stockCfg') || '{}');
+  } catch(e) { return {}; }
+}
+
+function saveSettings() {
+  const cfg = {
+    csvUrl: document.getElementById('input-csv-url').value.trim(),
+    overviewUrl: document.getElementById('input-overview-url').value.trim(),
+    rawUrl: document.getElementById('input-raw-url').value.trim(),
+    gasUrl: document.getElementById('input-gas-url').value.trim(),
+  };
+  if (!cfg.csvUrl) { showToast('請填入樞紐分析表 CSV 網址', 'error'); return; }
+  localStorage.setItem('stockCfg', JSON.stringify(cfg));
+  CFG = cfg;
+  document.getElementById('setup-banner').style.display = 'none';
+  document.getElementById('overview-content').style.display = 'block';
+  loadAll();
+}
+
+function restoreInputs() {
+  if (CFG.csvUrl) document.getElementById('input-csv-url').value = CFG.csvUrl;
+  if (CFG.overviewUrl) document.getElementById('input-overview-url').value = CFG.overviewUrl;
+  if (CFG.rawUrl) document.getElementById('input-raw-url').value = CFG.rawUrl;
+  if (CFG.gasUrl) document.getElementById('input-gas-url').value = CFG.gasUrl;
+}
+
+// ===== DATA LOADING =====
+async function loadAll() {
+  document.getElementById('last-updated').textContent = '載入中…';
+  try {
+    await Promise.all([loadPivot(), loadOverview(), loadRaw()]);
+    document.getElementById('last-updated').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW');
+  } catch(e) {
+    document.getElementById('last-updated').textContent = '載入失敗，請確認網址設定';
+  }
+}
+
+async function fetchCSV(url) {
+  const res = await fetch(url);
+  const text = await res.text();
+  const rows = text.trim().split('\n').map(r =>
+    r.split(',').map(c => c.replace(/^"|"$/g, '').trim())
+  );
+  return rows;
+}
+
+async function loadPivot() {
+  if (!CFG.csvUrl) return;
+  const rows = await fetchCSV(CFG.csvUrl);
+  const headers = rows[0];
+  pivotData = rows.slice(1).filter(r => r[0]).map(r => {
+    const o = {};
+    headers.forEach((h, i) => o[h] = r[i]);
+    return o;
+  });
+  renderStockList();
+  renderHoldingsPie();
+  renderPnlBar();
+}
+
+async function loadOverview() {
+  if (!CFG.overviewUrl) return;
+  const rows = await fetchCSV(CFG.overviewUrl);
+  overviewData = {};
+  rows.forEach(r => { if (r[0]) overviewData[r[0]] = r[1]; });
+  renderOverview();
+}
+
+async function loadRaw() {
+  if (!CFG.rawUrl) return;
+  const rows = await fetchCSV(CFG.rawUrl);
+  const headers = rows[0];
+  rawData = rows.slice(1).filter(r => r[0]).map(r => {
+    const o = {};
+    headers.forEach((h, i) => o[h] = r[i]);
+    return o;
+  });
+  renderHistory();
+  buildDividendYears();
+  renderDividendChart();
+  buildCodeFilter();
+}
+
+// ===== OVERVIEW =====
+function fmtNum(v, prefix='$') {
+  const n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  let s;
+  if (abs >= 1000000) s = (n/1000000).toFixed(2) + 'M';
+  else s = Math.round(n).toLocaleString('zh-TW');
+  return prefix + s;
+}
+function fmtPct(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  return (n >= 0 ? '+' : '') + (n*100).toFixed(2) + '%';
+}
+function colorClass(v) {
+  const n = parseFloat(v);
+  if (isNaN(n) || n === 0) return 'neutral';
+  return n > 0 ? 'up' : 'down';
+}
+
+function renderOverview() {
+  const d = overviewData;
+  const val = parseFloat(d['持有現值']) || 0;
+  const cost = parseFloat(d['投入總成本']) || 0;
+
+  setEl('ov-value', fmtNum(val), colorClass(val - cost));
+  setEl('ov-cost', '投入成本 ' + fmtNum(cost));
+  setEl('ov-pnl', fmtNum(d['已實現損益(含配息)'] || d['已實現損益（含配息）']), colorClass(d['已實現損益(含配息)'] || d['已實現損益（含配息）']));
+  setEl('ov-roi', fmtPct(parseFloat(d['投資報酬率(含配息)'] || d['投資報酬率（含配息）'])/100), colorClass(d['投資報酬率(含配息)'] || d['投資報酬率（含配息）']));
+  setEl('ov-annualized', fmtPct(parseFloat(d['年化報酬率(含配息)'] || d['年化報酬率（含配息）'])/100), colorClass(d['年化報酬率(含配息)'] || d['年化報酬率（含配息）']));
+  setEl('ov-dividend', fmtNum(d['配息合計']));
+  setEl('ov-pnl-nodiv', fmtNum(d['已實現損益(無配息)'] || d['損益金額(無配息)']), colorClass(d['已實現損益(無配息)'] || d['損益金額(無配息)']));
+  setEl('ov-roi-nodiv', fmtPct(parseFloat(d['投資報酬率(無配息)'] || 0)/100), colorClass(d['投資報酬率(無配息)'] || 0));
+  setEl('ov-years', (parseFloat(d['投資年數']) || 0).toFixed(1) + ' 年', 'neutral');
+}
+
+function setEl(id, text, cls='') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'metric-value ' + cls;
+}
+
+// ===== STOCK LIST =====
+function renderStockList() {
+  const el = document.getElementById('stock-list');
+  if (!pivotData.length) { el.innerHTML = '<div class="loading">無持倉資料</div>'; return; }
+  el.innerHTML = pivotData.map(s => {
+    const cur = parseFloat(s['本日價格']) || 0;
+    const cost = parseFloat(s['平均價格（不含配息）'] || s['平均價格(不含配息)']) || 0;
+    const pct = cost > 0 ? (cur - cost) / cost * 100 : 0;
+    const up = pct >= 0;
+    const val = parseFloat(s['持有現值']) || 0;
+    return `<div class="stock-row">
+      <div>
+        <div class="stock-code">${s['股票代碼'] || ''}</div>
+        <div class="stock-name">${s['公司名稱'] || ''}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">現值 ${fmtNum(val)}</div>
+      </div>
+      <div class="stock-right">
+        <div class="stock-price ${up?'up':'down'}">${cur.toLocaleString('zh-TW')}</div>
+        <div class="stock-pct ${up?'pct-up':'pct-down'}">${up?'+':''}${pct.toFixed(2)}%</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== CHARTS =====
+const CHART_COLORS = [
+  '#6c8fff','#a78bfa','#34d399','#f87171','#fbbf24',
+  '#38bdf8','#f472b6','#fb923c','#a3e635','#e879f9'
+];
+
+function switchPieMode(mode, btn) {
+  pieMode = mode;
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHoldingsPie();
+}
+
+function renderHoldingsPie() {
+  if (!pivotData.length) return;
+  const labels = pivotData.map(s => s['股票代碼'] || '?');
+  const values = pivotData.map(s =>
+    pieMode === 'value'
+      ? parseFloat(s['持有現值']) || 0
+      : parseFloat(s['股數']) || 0
+  );
+  const ctx = document.getElementById('pie-holdings').getContext('2d');
+  if (holdingsPieChart) holdingsPieChart.destroy();
+  holdingsPieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: CHART_COLORS, borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8b90a7', font: { size: 11 }, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+              const pct = (ctx.raw / total * 100).toFixed(1);
+              const val = pieMode === 'value' ? '$' + Math.round(ctx.raw).toLocaleString() : ctx.raw.toLocaleString() + '股';
+              return ` ${ctx.label}: ${val} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function buildDividendYears() {
+  const years = new Set();
+  rawData.filter(r => r['買賣別'] === '股息').forEach(r => {
+    const y = (r['成交日期'] || '').substring(0, 4);
+    if (y) years.add(y);
+  });
+  const sel = document.getElementById('div-year-select');
+  sel.innerHTML = '<option value="all">全部年度</option>';
+  [...years].sort().reverse().forEach(y => {
+    sel.innerHTML += `<option value="${y}">${y}年</option>`;
+  });
+}
+
+function renderDividendChart() {
+  const year = document.getElementById('div-year-select').value;
+  const divs = rawData.filter(r => {
+    if (r['買賣別'] !== '股息') return false;
+    if (year !== 'all' && !(r['成交日期'] || '').startsWith(year)) return false;
+    return true;
+  });
+  const map = {};
+  divs.forEach(r => {
+    const code = r['股票代碼'] || '?';
+    map[code] = (map[code] || 0) + (parseFloat(r['淨收付金額']) || 0);
+  });
+  const labels = Object.keys(map);
+  const values = Object.values(map);
+  const ctx = document.getElementById('pie-dividends').getContext('2d');
+  if (divPieChart) divPieChart.destroy();
+  divPieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: CHART_COLORS, borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8b90a7', font: { size: 11 }, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+              return ` ${ctx.label}: $${Math.round(ctx.raw).toLocaleString()} (${(ctx.raw/total*100).toFixed(1)}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderPnlBar() {
+  if (!pivotData.length) return;
+  const sorted = [...pivotData].sort((a,b) =>
+    (parseFloat(b['純買賣收益（不計入配息）'] || b['純買賣收益(不計入配息)']) || 0) -
+    (parseFloat(a['純買賣收益（不計入配息）'] || a['純買賣收益(不計入配息)']) || 0)
+  );
+  const labels = sorted.map(s => s['股票代碼'] || '?');
+  const values = sorted.map(s => parseFloat(s['純買賣收益（不計入配息）'] || s['純買賣收益(不計入配息)']) || 0);
+  const colors = values.map(v => v >= 0 ? '#34d399' : '#f87171');
+  const ctx = document.getElementById('bar-pnl').getContext('2d');
+  if (barChart) barChart.destroy();
+  barChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 6, borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => ' $' + Math.round(ctx.raw).toLocaleString() }
+      }},
+      scales: {
+        x: { ticks: { color: '#8b90a7', font: { size: 11 } }, grid: { display: false }, border: { display: false } },
+        y: { ticks: { color: '#8b90a7', font: { size: 10 }, callback: v => '$' + (v/1000).toFixed(0) + 'K' }, grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false } }
+      }
+    }
+  });
+}
+
+// ===== HISTORY =====
+function buildCodeFilter() {
+  const codes = [...new Set(rawData.map(r => r['股票代碼']).filter(Boolean))].sort();
+  const sel = document.getElementById('filter-code');
+  sel.innerHTML = '<option value="">全部股票</option>';
+  codes.forEach(c => sel.innerHTML += `<option value="${c}">${c}</option>`);
+}
+
+function renderHistory() {
+  const code = document.getElementById('filter-code').value;
+  const type = document.getElementById('filter-type').value;
+  let rows = [...rawData].filter(r => {
+    if (code && r['股票代碼'] !== code) return false;
+    if (type && r['買賣別'] !== type) return false;
+    return true;
+  }).reverse().slice(0, 100);
+
+  const el = document.getElementById('history-list');
+  if (!rows.length) { el.innerHTML = '<div class="loading">無資料</div>'; return; }
+
+  const typeClass = t => {
+    if (t === '現股買進' || t === '匯撥轉入') return 'buy';
+    if (t === '現股賣出') return 'sell';
+    if (t === '股息') return 'div';
+    return '';
+  };
+
+  el.innerHTML = rows.map(r => {
+    const net = parseFloat(r['淨收付金額']) || 0;
+    return `<div class="tx-row">
+      <div class="tx-top">
+        <span class="tx-code">${r['股票代碼'] || ''} ${r['公司名稱'] || ''}</span>
+        <span class="tx-type ${typeClass(r['買賣別'])}">${r['買賣別'] || ''}</span>
+      </div>
+      <div class="tx-bottom">
+        <span>${r['成交日期'] || ''} · ${(parseFloat(r['成交股數'])||0).toLocaleString()}股 @ ${(parseFloat(r['成交單價'])||0).toLocaleString()}</span>
+        <span class="${net>=0?'up':'down'}">${net>=0?'+':''}${Math.round(net).toLocaleString()}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== ADD TRANSACTION =====
+function selectType(type, btn) {
+  selectedType = type;
+  document.querySelectorAll('.type-pill').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  calcComputed();
+}
+
+function lookupName() {
+  const code = document.getElementById('f-code').value.trim();
+  const match = pivotData.find(s => s['股票代碼'] === code) ||
+                rawData.find(r => r['股票代碼'] === code);
+  if (match) document.getElementById('f-name').value = match['公司名稱'] || match['公司名稱'] || '';
+}
+
+function calcComputed() {
+  const price = parseFloat(document.getElementById('f-price').value) || 0;
+  const qty = parseInt(document.getElementById('f-qty').value) || 0;
+  const amount = price * qty;
+  const fee = Math.round(amount * 0.001425 * 0.28);
+  const tax = selectedType === '現股賣出' ? Math.round(amount * 0.003) : 0;
+  let net = 0;
+  if (selectedType === '現股買進' || selectedType === '匯撥轉入') net = -(amount + fee);
+  else if (selectedType === '現股賣出') net = amount - fee - tax;
+  else if (selectedType === '股息') net = amount;
+
+  document.getElementById('c-amount').textContent = amount ? '$' + Math.round(amount).toLocaleString() : '—';
+  document.getElementById('c-fee').textContent = amount ? '$' + fee.toLocaleString() : '—';
+  document.getElementById('c-tax').textContent = tax ? '$' + tax.toLocaleString() : (selectedType === '現股賣出' ? '$0' : '—');
+  const netEl = document.getElementById('c-net');
+  netEl.textContent = amount ? (net >= 0 ? '+' : '') + '$' + Math.round(net).toLocaleString() : '—';
+  netEl.className = net > 0 ? 'up' : net < 0 ? 'down' : '';
+}
+
+async function submitTransaction() {
+  const gasUrl = CFG.gasUrl;
+  if (!gasUrl) { showToast('請先設定 Apps Script 網址', 'error'); return; }
+
+  const date = document.getElementById('f-date').value;
+  const code = document.getElementById('f-code').value.trim();
+  const name = document.getElementById('f-name').value.trim();
+  const price = parseFloat(document.getElementById('f-price').value);
+  const qty = parseInt(document.getElementById('f-qty').value);
+
+  if (!date || !code || !price || !qty) { showToast('請填寫所有必要欄位', 'error'); return; }
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true; btn.textContent = '送出中…';
+
+  try {
+    const payload = { action: 'addTransaction', date, code, name, type: selectedType, price, qty, note: document.getElementById('f-note').value };
+    const res = await fetch(gasUrl, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (json.success) {
+      showToast('交易新增成功！', 'success');
+      document.getElementById('f-code').value = '';
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-price').value = '';
+      document.getElementById('f-qty').value = '';
+      document.getElementById('f-note').value = '';
+      calcComputed();
+      setTimeout(() => loadAll(), 1500);
+    } else throw new Error(json.error);
+  } catch(e) {
+    showToast('送出失敗，請確認 Apps Script 設定', 'error');
+  }
+  btn.disabled = false; btn.textContent = '新增交易';
+}
+
+// ===== NAV =====
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'charts') {
+    setTimeout(() => { renderHoldingsPie(); renderDividendChart(); renderPnlBar(); }, 100);
+  }
+}
+
+// ===== TOAST =====
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
