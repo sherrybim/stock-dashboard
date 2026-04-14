@@ -560,7 +560,13 @@ async function loadOverview() {
   if (!CFG.overviewUrl) return;
   const rows = await fetchCSV(CFG.overviewUrl);
   overviewData = {};
-  rows.forEach(r => { if (r[0]) overviewData[r[0]] = r[1]; });
+  if (rows.length >= 2) {
+    const headers = rows[0];
+    const values = rows[1];
+    headers.forEach((h, i) => { if (h) overviewData[h] = values[i]; });
+  } else if (rows.length === 1) {
+    rows.forEach(r => { if (r[0]) overviewData[r[0]] = r[1]; });
+  }
   renderOverview();
 }
 
@@ -590,9 +596,11 @@ function fmtNum(v, prefix='$') {
   return prefix + s;
 }
 function fmtPct(v) {
-  const n = parseFloat(v);
+  if (v === undefined || v === null || v === '') return '—';
+  const s = String(v).replace('%', '').trim();
+  const n = parseFloat(s);
   if (isNaN(n)) return '—';
-  return (n >= 0 ? '+' : '') + (n*100).toFixed(2) + '%';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 }
 function colorClass(v) {
   const n = parseFloat(v);
@@ -607,12 +615,12 @@ function renderOverview() {
 
   setEl('ov-value', fmtNum(val), colorClass(val - cost));
   setEl('ov-cost', '投入成本 ' + fmtNum(cost));
-  setEl('ov-pnl', fmtNum(d['已實現損益(含配息)'] || d['已實現損益（含配息）']), colorClass(d['已實現損益(含配息)'] || d['已實現損益（含配息）']));
-  setEl('ov-roi', fmtPct(parseFloat(d['投資報酬率(含配息)'] || d['投資報酬率（含配息）'])/100), colorClass(d['投資報酬率(含配息)'] || d['投資報酬率（含配息）']));
-  setEl('ov-annualized', fmtPct(parseFloat(d['年化報酬率(含配息)'] || d['年化報酬率（含配息）'])/100), colorClass(d['年化報酬率(含配息)'] || d['年化報酬率（含配息）']));
+  setEl('ov-pnl', fmtNum(d['已實現損益(含配息)']), colorClass(d['已實現損益(含配息)']));
+  setEl('ov-roi', fmtPct(parseFloat(d['投資報酬率(含配息)'] || 0)), colorClass(d['投資報酬率(含配息)'] || 0));
+  setEl('ov-annualized', fmtPct(parseFloat(d['年化報酬率(含配息)'] || 0)), colorClass(d['年化報酬率(含配息)'] || 0));
   setEl('ov-dividend', fmtNum(d['配息合計']));
-  setEl('ov-pnl-nodiv', fmtNum(d['已實現損益(無配息)'] || d['損益金額(無配息)']), colorClass(d['已實現損益(無配息)'] || d['損益金額(無配息)']));
-  setEl('ov-roi-nodiv', fmtPct(parseFloat(d['投資報酬率(無配息)'] || 0)/100), colorClass(d['投資報酬率(無配息)'] || 0));
+  setEl('ov-pnl-nodiv', fmtNum(d['已實現損益(無配息)']), colorClass(d['已實現損益(無配息)']));
+  setEl('ov-roi-nodiv', fmtPct(parseFloat(d['投資報酬率(無配息)'] || 0)), colorClass(d['投資報酬率(無配息)'] || 0));
   setEl('ov-years', (parseFloat(d['投資年數']) || 0).toFixed(1) + ' 年', 'neutral');
 }
 
